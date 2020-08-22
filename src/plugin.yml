@@ -1,0 +1,6 @@
+name: ChickenFurnace
+version: 1.00
+main: me.bluemond.chickenfurnace.ChickenFurnace
+softdepend: [N/A]
+authors: [BlueMond]
+api-version: 1.16
