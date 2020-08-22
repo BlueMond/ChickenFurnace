@@ -24,7 +24,7 @@ public class ChickenFurnaceManager {
         this.plugin = plugin;
         driverWaitTicks = 20;
         inputCookTicks = 200;
-        offsets.add(new double[]{.5,.5,.5});
+        offsets.add(new double[]{.4,.4,.4});
         offsets.add(new double[]{-.5,-.5,-.5});
         offsets.add(new double[]{-.5,.5,-.5});
         offsets.add(new double[]{.5,-.5,.5});
@@ -58,7 +58,7 @@ public class ChickenFurnaceManager {
                         chickenIterator.remove();
                     }
                     activeChicken.updateName();
-                    displayParticleEffect(activeChicken.getChicken());
+                    playParticleEffect(activeChicken.getChicken());
                 }
             }
 
@@ -66,13 +66,18 @@ public class ChickenFurnaceManager {
         }
     }
 
-    private void displayParticleEffect(Chicken chicken){
+    private void playParticleEffect(Chicken chicken){
         Location loc = chicken.getLocation();
         World world = chicken.getWorld();
 
+        world.playEffect(loc, Effect.SMOKE, 1);
+
         for(double[] offset : offsets){
-            world.spawnParticle(Particle.FLAME, loc, 1, offset[0], offset[1], offset[2]);
+            Location location = new Location(loc.getWorld(),
+                    loc.getX()+offset[0], loc.getY()+offset[1], loc.getZ()+offset[2]);
+            world.spawnParticle(Particle.FLAME, location, 1, 0D, 0D, 0D, 0D);
         }
+            //world.spawnParticle(Particle.FLAME, loc, 1, offset[0], offset[1], offset[2]);
     }
 
     public void removeDeadChicken(Chicken chicken){
