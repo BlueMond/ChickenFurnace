@@ -43,8 +43,9 @@ public class ChickenListener implements Listener {
             FurnaceRecipe furnaceRecipe = plugin.getChickenFurnaceManager().getFurnaceRecipe(item);
 
             if(furnaceRecipe != null){
-                plugin.getChickenFurnaceManager().addActiveChicken(
-                        new ActiveChicken(chicken, item, furnaceRecipe.getResult()) );
+                ActiveChicken activeChicken = new ActiveChicken(chicken, item, furnaceRecipe.getResult());
+
+                plugin.getChickenFurnaceManager().addActiveChicken(activeChicken);
 
                 player.getInventory().setItem(slot, new ItemStack(Material.AIR));
                 event.setCancelled(true);

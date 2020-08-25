@@ -1,5 +1,5 @@
 name: ChickenFurnace
-version: 1.00
+version: 1.2
 main: me.bluemond.chickenfurnace.ChickenFurnace
 softdepend: [N/A]
 authors: [BlueMond]

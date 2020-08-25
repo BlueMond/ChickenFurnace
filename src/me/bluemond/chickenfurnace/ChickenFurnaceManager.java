@@ -11,7 +11,8 @@ import java.util.*;
 
 public class ChickenFurnaceManager {
 
-    List<ActiveChicken> activeChickens;
+    List<UUID> unloadedActiveChickens;
+    Map<UUID, ActiveChicken> activeChickens;
     List<double[]> offsets;
     ChickenFurnace plugin;
     long driverWaitTicks;
@@ -19,17 +20,22 @@ public class ChickenFurnaceManager {
     boolean furnaceDriving;
 
     public ChickenFurnaceManager(ChickenFurnace plugin){
-        activeChickens = new ArrayList<>();
-        offsets = new ArrayList<double[]>();
         this.plugin = plugin;
+        loadChickensFromSave();
+        offsets = new ArrayList<double[]>();
         driverWaitTicks = 20;
         inputCookTicks = 200;
-        offsets.add(new double[]{.4,.4,.4});
-        offsets.add(new double[]{-.5,-.5,-.5});
-        offsets.add(new double[]{-.5,.5,-.5});
-        offsets.add(new double[]{.5,-.5,.5});
+        offsets.add(new double[]{.25,.25,.25});
+        offsets.add(new double[]{-.25,-.25,-.25});
+        offsets.add(new double[]{-.25,.25,-.25});
+        offsets.add(new double[]{.25,-.25,.25});
 
         startFurnaceDriver();
+    }
+
+    private void loadChickensFromSave(){
+        activeChickens = new HashMap<>();
+        unloadedActiveChickens = plugin.getDataHandler().getAllUUIDs();
     }
 
     public void startFurnaceDriver(){
@@ -41,24 +47,35 @@ public class ChickenFurnaceManager {
         furnaceDriving = false;
     }
 
+
+    // performs the operations for all active chickens every wait tick
     private void furnaceDriver(){
         if(furnaceDriving){
-            Iterator<ActiveChicken> chickenIterator = activeChickens.iterator();
+            Iterator<ActiveChicken> chickenIterator = activeChickens.values().iterator();
 
             while(chickenIterator.hasNext()){
                 ActiveChicken activeChicken = chickenIterator.next();
-                World world = activeChicken.getWorld();
-                long currentWorldTick = world.getFullTime();
-                long lastDropTick = activeChicken.getLastDropTick();
-                if(currentWorldTick - lastDropTick >= inputCookTicks){
-                    activeChicken.setLastDropTick(currentWorldTick);
-                    activeChicken.getWorld().dropItemNaturally(activeChicken.getLocation(),
-                            activeChicken.getResultantItem());
-                    if (activeChicken.decrementInput()){
-                        chickenIterator.remove();
+                if(activeChicken.getChicken().getWorld().getChunkAt(activeChicken.getLocation()).isLoaded()) {
+                    World world = activeChicken.getWorld();
+                    long currentWorldTick = world.getFullTime();
+                    long lastDropTick = activeChicken.getLastDropTick();
+
+                    if (currentWorldTick - lastDropTick >= inputCookTicks) {
+                        activeChicken.setLastDropTick(currentWorldTick);
+                        activeChicken.getWorld().dropItemNaturally(activeChicken.getLocation(),
+                                activeChicken.getResultantItem());
+                        if (activeChicken.decrementInput()) {
+                            removeActiveChicken(activeChicken.getChicken());
+                            plugin.getDataHandler().removeActiveChicken(activeChicken.getChicken());
+                        }else{
+                            plugin.getDataHandler().setActiveChicken(activeChicken);
+                        }
+                        activeChicken.updateName();
+                        playParticleEffect(activeChicken.getChicken());
+
                     }
-                    activeChicken.updateName();
-                    playParticleEffect(activeChicken.getChicken());
+                }else{
+                    unloadActiveChicken(activeChicken);
                 }
             }
 
@@ -66,6 +83,14 @@ public class ChickenFurnaceManager {
         }
     }
 
+    // unloads an activeChicken, because its chunk is no longer loaded
+    private void unloadActiveChicken(ActiveChicken activeChicken) {
+        UUID uuid = activeChicken.getChicken().getUniqueId();
+        activeChickens.remove(uuid);
+        unloadedActiveChickens.add(uuid);
+    }
+
+    // particle effect for when an output is processed for an active chicken
     private void playParticleEffect(Chicken chicken){
         Location loc = chicken.getLocation();
         World world = chicken.getWorld();
@@ -77,36 +102,108 @@ public class ChickenFurnaceManager {
                     loc.getX()+offset[0], loc.getY()+offset[1], loc.getZ()+offset[2]);
             world.spawnParticle(Particle.FLAME, location, 1, 0D, 0D, 0D, 0D);
         }
-            //world.spawnParticle(Particle.FLAME, loc, 1, offset[0], offset[1], offset[2]);
     }
 
+    // removes a dead chicken from the furnace manager if it corresponds with an ActiveChicken instance
+    // and drops its input
     public void removeDeadChicken(Chicken chicken){
-        Iterator<ActiveChicken> chickenIterator = activeChickens.iterator();
+        ActiveChicken activeChicken = activeChickens.get(chicken.getUniqueId());
 
-        while(chickenIterator.hasNext()){
-            ActiveChicken activeChicken = chickenIterator.next();
-            if(chicken.equals(activeChicken.getChicken())){
-                chickenIterator.remove();
-                activeChicken.getWorld()
-                        .dropItemNaturally(activeChicken.getChicken().getLocation(), activeChicken.getProcessingItem());
-                break;
-            }
+        if(activeChicken != null){
+            activeChicken.getWorld()
+                    .dropItemNaturally(activeChicken.getChicken().getLocation(), activeChicken.getProcessingItem());
         }
+
+        removeActiveChicken(chicken);
     }
 
+    // removes an ActiveChicken instance from the furnace manager
+    public void removeActiveChicken(Chicken chicken){
+        unloadedActiveChickens.remove(chicken.getUniqueId());
+        activeChickens.remove(chicken.getUniqueId());
+        plugin.getDataHandler().removeActiveChicken(chicken);
+    }
+
+    // adds an ActiveChicken instance to the furnace manager
     public void addActiveChicken(ActiveChicken activeChicken){
-        activeChickens.add(activeChicken);
+        activeChickens.put(activeChicken.getChicken().getUniqueId(), activeChicken);
+
+        plugin.getDataHandler().setActiveChicken(activeChicken);
     }
 
-    public boolean alreadyActiveChicken(Chicken chicken){
-        for(ActiveChicken activeChicken : activeChickens){
-            if(chicken.equals(activeChicken.getChicken())){
-                return true;
-            }
+    // returns whether or not the chicken is an unloaded active chicken
+    public boolean isUnloadedActiveChicken(Chicken chicken){
+        if(unloadedActiveChickens.contains(chicken.getUniqueId())){
+            return true;
         }
-
         return false;
     }
+
+    // returns whether or not the chicken is already a loaded active chicken
+    public boolean alreadyActiveChicken(Chicken chicken){
+        if(activeChickens.get(chicken.getUniqueId()) != null){
+            return true;
+        }
+        return false;
+    }
+
+    // loads saved activechicken if the chicken in question was saved and not already loaded
+    private void loadInactiveChicken(Chicken chicken){
+        if(isUnloadedActiveChicken(chicken) && !alreadyActiveChicken(chicken)){
+            addActiveChicken(plugin.getDataHandler().getActiveChicken(chicken));
+            unloadedActiveChickens.remove(chicken.getUniqueId());
+        }
+    }
+
+    // tries to load an active chicken for any chicken found in the chunk
+    public void loadChunkInactiveChickens(Chunk chunk) {
+        Entity[] entities = chunk.getEntities();
+        for(Entity entity : entities){
+            if(entity instanceof Chicken){
+                Chicken chicken = (Chicken) entity;
+
+                loadInactiveChicken(chicken);
+            }
+        }
+    }
+
+    // tries to load an active chicken for any chickens loaded in the world
+    public void loadAllWorldsInactiveChickens(){
+        List<World> worlds = plugin.getServer().getWorlds();
+        for(World world : worlds){
+            Collection<Chicken> chickens = world.getEntitiesByClass(Chicken.class);
+            for(Chicken chicken : chickens){
+                loadInactiveChicken(chicken);
+            }
+        }
+    }
+
+    // gets the furnace recipe for a given input (returns null if none)
+    public FurnaceRecipe getFurnaceRecipe(ItemStack item){
+
+        Iterator<Recipe> recipeIterator = Bukkit.recipeIterator();
+
+        while(recipeIterator.hasNext()){
+            Recipe recipe = recipeIterator.next();
+            if(recipe instanceof FurnaceRecipe){
+                FurnaceRecipe furnaceRecipe = (FurnaceRecipe) recipe;
+                if(item.getType().equals(furnaceRecipe.getInput().getType())){
+                    return furnaceRecipe;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    public void saveActiveChickens() {
+        for(ActiveChicken activeChicken : activeChickens.values()){
+            plugin.getDataHandler().setActiveChicken(activeChicken);
+        }
+    }
+
+    // OLD FUNCTION USING CUSTOM NAME PARSING FOR LOADING AFTER SERVER RESTART
+    /*
 
     private void loadInactiveChicken(Chicken chicken){
         String customName = chicken.getCustomName();
@@ -128,40 +225,7 @@ public class ChickenFurnaceManager {
         }
     }
 
-    public void loadChunkInactiveChickens(Chunk chunk) {
-        Entity[] entities = chunk.getEntities();
-        for(Entity entity : entities){
-            if(entity instanceof Chicken){
-                Chicken chicken = (Chicken) entity;
+     */
 
-                loadInactiveChicken(chicken);
-            }
-        }
-    }
 
-    public void loadAllWorldsInactiveChickens(List<World> worlds){
-        for(World world : worlds){
-            Collection<Chicken> chickens = world.getEntitiesByClass(Chicken.class);
-            for(Chicken chicken : chickens){
-                loadInactiveChicken(chicken);
-            }
-        }
-    }
-
-    public FurnaceRecipe getFurnaceRecipe(ItemStack item){
-
-        Iterator<Recipe> recipeIterator = Bukkit.recipeIterator();
-
-        while(recipeIterator.hasNext()){
-            Recipe recipe = recipeIterator.next();
-            if(recipe instanceof FurnaceRecipe){
-                FurnaceRecipe furnaceRecipe = (FurnaceRecipe) recipe;
-                if(item.getType().equals(furnaceRecipe.getInput().getType())){
-                    return furnaceRecipe;
-                }
-            }
-        }
-
-        return null;
-    }
 }

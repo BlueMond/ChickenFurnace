@@ -1,5 +1,6 @@
 package me.bluemond.chickenfurnace;
 
+import me.bluemond.chickenfurnace.datahandler.DataHandler;
 import org.bukkit.plugin.java.JavaPlugin;
 
 
@@ -8,18 +9,20 @@ public class ChickenFurnace extends JavaPlugin {
 
     private CommandManager commandManager;
     private ChickenFurnaceManager chickenFurnaceManager;
+    private DataHandler dataHandler;
 
     @Override
     public void onEnable() {
         // on server enabling the plugin
 
         //commandManager = new CommandManager(this);
-        //getCommand("pocketfurnace").setExecutor(commandManager);
+        //getCommand("chickenfurnace").setExecutor(commandManager);
 
         // ADD PARTICLE EFFECTS AND SOUND TO CHICKEN WHEN THEY FINISH SMELTING 1 INPUT
 
+        dataHandler = new DataHandler(this);
         chickenFurnaceManager = new ChickenFurnaceManager(this);
-        chickenFurnaceManager.loadAllWorldsInactiveChickens(getServer().getWorlds());
+        chickenFurnaceManager.loadAllWorldsInactiveChickens();
 
         getServer().getPluginManager().registerEvents(new ChickenListener(this), this);
 
@@ -31,11 +34,16 @@ public class ChickenFurnace extends JavaPlugin {
         // on server disabling the plugin
 
         chickenFurnaceManager.stopFurnaceDriver();
+        chickenFurnaceManager.saveActiveChickens();
 
         getLogger().info("ChickenFurnace v" + getDescription().getVersion() + " has been disabled!");
     }
 
     public ChickenFurnaceManager getChickenFurnaceManager() {
         return chickenFurnaceManager;
+    }
+
+    public DataHandler getDataHandler() {
+        return dataHandler;
     }
 }
