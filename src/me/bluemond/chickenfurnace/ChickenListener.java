@@ -48,7 +48,6 @@ public class ChickenListener implements Listener {
                 plugin.getChickenFurnaceManager().addActiveChicken(activeChicken);
 
                 player.getInventory().setItem(slot, new ItemStack(Material.AIR));
-                event.setCancelled(true);
             }
         }
     }
